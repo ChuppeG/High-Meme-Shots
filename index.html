@@ -12,24 +12,38 @@
             position: relative; 
             width: 100%; 
             height: 80vh; 
-            background: linear-gradient(#87CEEB, #E0F6FF); /* Sky background */
-            border-bottom: 10px solid #654321; /* Ground */
+            background: #87CEEB; /* Sky Blue */
+            overflow: hidden;
+            border-bottom: 10px solid #654321;
         }
 
-        /* THE MOVING FROG */
+        /* SCROLLING CLOUDS (Moving Forward Effect) */
+        #background-scroll {
+            position: absolute;
+            width: 200%;
+            height: 100%;
+            background-image: url('https://www.transparenttextures.com/patterns/cloudy-day.png');
+            opacity: 0.5;
+            top: 0;
+            left: 0;
+        }
+
+        /* THE FROG */
         #frog { 
             font-size: 80px; 
             position: absolute; 
-            left: 50%; 
-            transform: translateX(-50%); 
-            cursor: pointer; 
+            left: 100px; /* Stay on the left side while background moves */
+            top: 200px;
             user-select: none;
-            transition: transform 0.1s;
+            z-index: 10;
         }
 
-        .btn { padding: 15px 25px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; margin-top: 50px; color: white; }
-        #connectBtn { background: #007bff; }
-        #payBtn { background: #35d07f; display: none; }
+        /* BUTTONS */
+        .btn { padding: 15px 25px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 10px; color: white; }
+        #connectBtn { background: #007bff; margin-top: 50px;}
+        #paySection { display: none; margin-top: 50px; }
+        .payUsdt { background: #35d07f; }
+        .payCelo { background: #fbcc5c; color: #333; }
     </style>
 </head>
 <body>
@@ -38,105 +52,128 @@
     <p id="status">Connect wallet to play</p>
 
     <button id="connectBtn" class="btn" onclick="connect()">CONNECT WALLET</button>
-    <button id="payBtn" class="btn" onclick="payWithUSDT()">PAY 0.1 USDT TO START</button>
+
+    <div id="paySection">
+        <button id="btnUsdt" class="btn payUsdt" onclick="payWithUSDT()">PAY 0.1 USDT</button>
+        <button id="btnCelo" class="btn payCelo" onclick="payWithCelo()">PAY 0.1 CELO</button>
+    </div>
 
     <div id="game-area" onmousedown="jump()" ontouchstart="jump()">
-        <h2 style="margin-top: 20px;">Score: <span id="score">0</span></h2>
+        <div id="background-scroll"></div>
+        <h2 style="position:relative; z-index:20;">Altitude: <span id="score">0</span>m</h2>
         <div id="frog">🐸</div>
     </div>
 
     <script>
-        // --- BLOCKCHAIN SETTINGS ---
         const contractAddress = "0x9ca3E7497B9ee5Ab58310F0B391eB417513dA29d";
         const usdtAddress = "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e";
-        const abi = ["function payWithUSDT() public", "function approve(address spender, uint256 amount) public returns (bool)"];
-        let signer, gameContract, usdtContract;
+        const abi = [
+            "function payWithCelo() public payable",
+            "function payWithUSDT() public",
+            "function approve(address spender, uint256 amount) public returns (bool)"
+        ];
 
-        // --- GAME PHYSICS SETTINGS ---
+        let signer, gameContract, usdtContract;
         let score = 0;
-        let posY = 200;      // Start position (height)
-        let velocity = 0;   // Falling speed
-        let gravity = 0.4;  // How fast it falls
-        let lift = -10;     // How high it jumps per tap
+        let posY = 200;
+        let velocity = 0;
+        let gravity = 0.4;
+        let lift = -8;
+        let bgPos = 0;
         let isGameRunning = false;
 
-        // 1. CONNECT & PAY
+        // 1. WALLET LOGIC
+        window.onload = () => {
+            if (window.ethereum && window.ethereum.isMiniPay) {
+                document.getElementById('connectBtn').style.display = 'none';
+                connect();
+            }
+        };
+
         async function connect() {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            await provider.send("eth_requestAccounts", []);
-            signer = provider.getSigner();
-            document.getElementById('connectBtn').style.display = 'none';
-            document.getElementById('payBtn').style.display = 'inline-block';
-            document.getElementById('status').innerText = "Wallet Connected!";
-            
-            gameContract = new ethers.Contract(contractAddress, abi, signer);
-            usdtContract = new ethers.Contract(usdtAddress, abi, signer);
+            try {
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = provider.getSigner();
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('paySection').style.display = 'block';
+                document.getElementById('status').innerText = "Ready to Fly!";
+                
+                // Hide CELO on MiniPay
+                if(window.ethereum.isMiniPay) { document.getElementById('btnCelo').style.display = 'none'; }
+
+                gameContract = new ethers.Contract(contractAddress, abi, signer);
+                usdtContract = new ethers.Contract(usdtAddress, abi, signer);
+            } catch (e) { alert("Connect error"); }
+        }
+
+        async function payWithCelo() {
+            try {
+                const tx = await gameContract.payWithCelo({ value: ethers.utils.parseEther("0.1") });
+                await tx.wait();
+                startGame();
+            } catch (e) { alert(e.message); }
         }
 
         async function payWithUSDT() {
             try {
                 const amount = ethers.utils.parseUnits("0.1", 6);
-                document.getElementById('status').innerText = "Confirming in Wallet...";
-                
                 const appTx = await usdtContract.approve(contractAddress, amount);
                 await appTx.wait();
-
                 const payTx = await gameContract.payWithUSDT();
                 await payTx.wait();
-
                 startGame();
-            } catch (e) { alert("Payment Failed: " + e.message); }
+            } catch (e) { alert(e.message); }
         }
 
-        // 2. GAME LOGIC
+        // 2. GAME ENGINE
         function startGame() {
-            document.getElementById('payBtn').style.display = 'none';
+            document.getElementById('paySection').style.display = 'none';
             document.getElementById('status').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
             isGameRunning = true;
-            score = 0;
-            posY = 200;
-            velocity = 0;
-            requestAnimationFrame(gameLoop); // Starts the movement loop
+            requestAnimationFrame(gameLoop);
         }
 
         function jump() {
             if (!isGameRunning) return;
-            velocity = lift; // Give it upward speed
-            score++;
+            velocity = lift;
+            score += 10; // Gain altitude on jump
             document.getElementById('score').innerText = score;
         }
 
         function gameLoop() {
             if (!isGameRunning) return;
 
-            // Apply gravity to velocity
+            // Physics
             velocity += gravity;
-            // Apply velocity to position
             posY += velocity;
+            bgPos -= 2; // Moving forward speed
 
-            // Ground Collision (If it hits the bottom)
-            const groundLimit = document.getElementById('game-area').clientHeight - 100;
-            if (posY > groundLimit) {
-                posY = groundLimit;
+            // Moving Background Effect
+            document.getElementById('background-scroll').style.left = (bgPos % 100) + "%";
+
+            // Collision with Ground
+            const ground = document.getElementById('game-area').clientHeight - 100;
+            if (posY > ground) {
+                posY = ground;
                 gameOver();
             }
 
-            // Ceiling Collision
-            if (posY < 0) { posY = 0; velocity = 0; }
+            // Infinite Ceiling (Frog stays on screen, but score keeps going up)
+            if (posY < 50) {
+                posY = 50; 
+                velocity = 0;
+            }
 
-            // Update the Frog's position on screen
-            const frogElement = document.getElementById('frog');
-            frogElement.style.top = posY + "px";
-
-            // Loop again
+            document.getElementById('frog').style.top = posY + "px";
             requestAnimationFrame(gameLoop);
         }
 
         function gameOver() {
             isGameRunning = false;
-            alert("GAME OVER! Your Score: " + score);
-            location.reload(); // Restart the page
+            alert("CRASHED! Max Altitude: " + score + "m");
+            location.reload();
         }
     </script>
 </body>
