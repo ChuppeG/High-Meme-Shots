@@ -1,66 +1,61 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Meme High Shot</title>
+    <title>Meme High Shot - Infinite</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
-        body { text-align: center; font-family: sans-serif; background: #f0f0f0; margin: 0; overflow: hidden; }
+        body { text-align: center; font-family: 'Arial', sans-serif; background: #333; margin: 0; overflow: hidden; color: white; }
         
-        /* THE GAME STAGE */
         #game-area { 
             display: none; 
             position: relative; 
             width: 100%; 
-            height: 80vh; 
-            background: #87CEEB; /* Sky Blue */
-            overflow: hidden;
-            border-bottom: 10px solid #654321;
+            height: 85vh; 
+            /* Infinite Cloud Texture */
+            background-color: #87CEEB;
+            background-image: url('https://www.transparenttextures.com/patterns/clouds.png');
+            background-repeat: repeat-x;
+            background-position: 0px 0px;
+            border-bottom: 12px solid #5d4037;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.2);
         }
 
-        /* SCROLLING CLOUDS (Moving Forward Effect) */
-        #background-scroll {
-            position: absolute;
-            width: 200%;
-            height: 100%;
-            background-image: url('https://www.transparenttextures.com/patterns/cloudy-day.png');
-            opacity: 0.5;
-            top: 0;
-            left: 0;
-        }
-
-        /* THE FROG */
         #frog { 
             font-size: 80px; 
             position: absolute; 
-            left: 100px; /* Stay on the left side while background moves */
+            left: 15%; 
             top: 200px;
             user-select: none;
             z-index: 10;
+            filter: drop-shadow(0 10px 10px rgba(0,0,0,0.2));
+            transition: transform 0.1s; /* For tilting effect */
         }
 
-        /* BUTTONS */
-        .btn { padding: 15px 25px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 10px; color: white; }
-        #connectBtn { background: #007bff; margin-top: 50px;}
-        #paySection { display: none; margin-top: 50px; }
+        .ui-layer { position: relative; z-index: 100; padding-top: 50px; }
+        .btn { padding: 18px 30px; font-size: 20px; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; margin: 10px; color: white; transition: 0.2s; }
+        .btn:active { transform: scale(0.95); }
+        #connectBtn { background: #007bff; }
+        #paySection { display: none; }
         .payUsdt { background: #35d07f; }
         .payCelo { background: #fbcc5c; color: #333; }
+        #altitude-meter { font-size: 30px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <h1>🚀 Meme High Shot</h1>
-    <p id="status">Connect wallet to play</p>
+    <div class="ui-layer">
+        <h1>🚀 Meme High Shot</h1>
+        <p id="status">Connect your wallet to fly!</p>
+        <button id="connectBtn" class="btn" onclick="connect()">CONNECT WALLET</button>
 
-    <button id="connectBtn" class="btn" onclick="connect()">CONNECT WALLET</button>
-
-    <div id="paySection">
-        <button id="btnUsdt" class="btn payUsdt" onclick="payWithUSDT()">PAY 0.1 USDT</button>
-        <button id="btnCelo" class="btn payCelo" onclick="payWithCelo()">PAY 0.1 CELO</button>
+        <div id="paySection">
+            <button id="btnUsdt" class="btn payUsdt" onclick="payWithUSDT()">PAY 0.1 USDT</button>
+            <button id="btnCelo" class="btn payCelo" onclick="payWithCelo()">PAY 0.1 CELO</button>
+        </div>
     </div>
 
     <div id="game-area" onmousedown="jump()" ontouchstart="jump()">
-        <div id="background-scroll"></div>
-        <h2 style="position:relative; z-index:20;">Altitude: <span id="score">0</span>m</h2>
+        <div id="altitude-meter">Altitude: <span id="score">0</span>m</div>
         <div id="frog">🐸</div>
     </div>
 
@@ -77,12 +72,11 @@
         let score = 0;
         let posY = 200;
         let velocity = 0;
-        let gravity = 0.4;
-        let lift = -8;
-        let bgPos = 0;
+        let gravity = 0.45;
+        let lift = -9;
+        let bgX = 0; // The background position
         let isGameRunning = false;
 
-        // 1. WALLET LOGIC
         window.onload = () => {
             if (window.ethereum && window.ethereum.isMiniPay) {
                 document.getElementById('connectBtn').style.display = 'none';
@@ -91,20 +85,21 @@
         };
 
         async function connect() {
+            if (typeof ethers === "undefined") return alert("Ethers loading...");
             try {
                 const provider = new ethers.providers.Web3Provider(window.ethereum);
                 await provider.send("eth_requestAccounts", []);
                 signer = provider.getSigner();
+                
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('paySection').style.display = 'block';
-                document.getElementById('status').innerText = "Ready to Fly!";
-                
-                // Hide CELO on MiniPay
+                document.getElementById('status').innerText = "Wallet Ready!";
+
                 if(window.ethereum.isMiniPay) { document.getElementById('btnCelo').style.display = 'none'; }
 
                 gameContract = new ethers.Contract(contractAddress, abi, signer);
                 usdtContract = new ethers.Contract(usdtAddress, abi, signer);
-            } catch (e) { alert("Connect error"); }
+            } catch (e) { alert("Error connecting: " + e.message); }
         }
 
         async function payWithCelo() {
@@ -118,61 +113,69 @@
         async function payWithUSDT() {
             try {
                 const amount = ethers.utils.parseUnits("0.1", 6);
+                document.getElementById('status').innerText = "Step 1: Approving USDT...";
                 const appTx = await usdtContract.approve(contractAddress, amount);
                 await appTx.wait();
+                
+                document.getElementById('status').innerText = "Step 2: Sending Payment...";
                 const payTx = await gameContract.payWithUSDT();
                 await payTx.wait();
                 startGame();
             } catch (e) { alert(e.message); }
         }
 
-        // 2. GAME ENGINE
         function startGame() {
-            document.getElementById('paySection').style.display = 'none';
-            document.getElementById('status').style.display = 'none';
+            document.querySelector('.ui-layer').style.display = 'none';
             document.getElementById('game-area').style.display = 'block';
             isGameRunning = true;
-            requestAnimationFrame(gameLoop);
+            loop();
         }
 
         function jump() {
             if (!isGameRunning) return;
             velocity = lift;
-            score += 10; // Gain altitude on jump
-            document.getElementById('score').innerText = score;
         }
 
-        function gameLoop() {
+        function loop() {
             if (!isGameRunning) return;
 
-            // Physics
+            // 1. PHYSICS
             velocity += gravity;
             posY += velocity;
-            bgPos -= 2; // Moving forward speed
+            
+            // 2. FORWARD MOTION ILLUSION
+            bgX -= 4; // Horizontal scroll speed
+            document.getElementById('game-area').style.backgroundPosition = bgX + "px 0px";
 
-            // Moving Background Effect
-            document.getElementById('background-scroll').style.left = (bgPos % 100) + "%";
+            // 3. SCORE LOGIC (Altitude increases while in air)
+            if (posY < (document.getElementById('game-area').clientHeight - 120)) {
+                score += 1;
+                document.getElementById('score').innerText = score;
+            }
 
-            // Collision with Ground
-            const ground = document.getElementById('game-area').clientHeight - 100;
+            // 4. FROG TILT EFFECT
+            let rotation = velocity * 3; // Tilt based on speed
+            if (rotation > 25) rotation = 25;
+            if (rotation < -25) rotation = -25;
+            
+            const frog = document.getElementById('frog');
+            frog.style.top = posY + "px";
+            frog.style.transform = `rotate(${rotation}deg)`;
+
+            // 5. COLLISIONS
+            const ground = document.getElementById('game-area').clientHeight - 110;
             if (posY > ground) {
                 posY = ground;
                 gameOver();
             }
+            if (posY < 0) { posY = 0; velocity = 0; }
 
-            // Infinite Ceiling (Frog stays on screen, but score keeps going up)
-            if (posY < 50) {
-                posY = 50; 
-                velocity = 0;
-            }
-
-            document.getElementById('frog').style.top = posY + "px";
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(loop);
         }
 
         function gameOver() {
             isGameRunning = false;
-            alert("CRASHED! Max Altitude: " + score + "m");
+            alert("💥 CRASHED! \nAltitude Reached: " + score + "m");
             location.reload();
         }
     </script>
