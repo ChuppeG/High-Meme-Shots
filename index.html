@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>Meme High Shot</title>
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         body { text-align: center; font-family: sans-serif; background: #f0f0f0; padding: 20px; }
         #game-area, #paySection { display: none; }
@@ -56,6 +56,12 @@
         };
 
         async function connect() {
+            // Check if ethers actually loaded
+            if (typeof ethers === "undefined") {
+                alert("Ethers library is still loading. Please wait 2 seconds and try again.");
+                return;
+            }
+
             try {
                 const provider = new ethers.providers.Web3Provider(window.ethereum);
                 await provider.send("eth_requestAccounts", []);
@@ -65,7 +71,6 @@
                 document.getElementById('connectBtn').style.display = 'none';
                 document.getElementById('paySection').style.display = 'block';
 
-                // Initialize both contracts
                 gameContract = new ethers.Contract(contractAddress, abi, signer);
                 usdtContract = new ethers.Contract(usdtAddress, abi, signer);
             } catch (e) {
