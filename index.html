@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Meme High Shot</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js"></script>
+    <style>
+        body { text-align: center; font-family: sans-serif; background: #f0f0f0; padding: 20px; }
+        #game-area, #paySection { display: none; }
+        .btn { padding: 15px 25px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; margin: 10px; color: white; }
+        #connectBtn { background: #007bff; }
+        .payUsdt { background: #35d07f; }
+        .payCelo { background: #fbcc5c; color: #333; }
+        .meme { font-size: 100px; cursor: pointer; user-select: none; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 Meme High Shot</h1>
+    <p id="status">Connect wallet to play</p>
+
+    <button id="connectBtn" class="btn" onclick="connect()">CONNECT WALLET</button>
+
+    <div id="paySection">
+        <!-- Changed to USDT to match your new strategy -->
+        <button id="btnUsdt" class="btn payUsdt" onclick="payWithUSDT()">PAY 0.1 USDT</button>
+        <button id="btnCelo" class="btn payCelo" onclick="payWithCelo()">PAY 0.1 CELO</button>
+    </div>
+
+    <div id="game-area">
+        <h2>Score: <span id="score">0</span></h2>
+        <div class="meme" onclick="addPoint()">🐸</div>
+    </div>
+
+    <script>
+        const contractAddress = "0x9ca3E7497B9ee5Ab58310F0B391eB417513dA29d";
+        const usdtAddress = "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e";
+
+        // THIS IS THE ABI - It tells the website what functions exist in your contract
+        const abi = [
+            "function payWithCelo() public payable",
+            "function payWithUSDT() public",
+            "function approve(address spender, uint256 amount) public returns (bool)",
+            "function usdtFee() public view returns (uint256)",
+            "function celoFee() public view returns (uint256)"
+        ];
+
+        let signer, gameContract, usdtContract;
+
+        window.onload = async () => {
+            // MiniPay Tweak: Auto-connect and hide unnecessary buttons
+            if (window.ethereum && window.ethereum.isMiniPay) {
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('btnCelo').style.display = 'none'; 
+                connect();
+            }
+        };
+
+        async function connect() {
+            try {
+                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = provider.getSigner();
+                
+                document.getElementById('status').innerText = "Wallet Connected";
+                document.getElementById('connectBtn').style.display = 'none';
+                document.getElementById('paySection').style.display = 'block';
+
+                // Initialize both contracts
+                gameContract = new ethers.Contract(contractAddress, abi, signer);
+                usdtContract = new ethers.Contract(usdtAddress, abi, signer);
+            } catch (e) {
+                alert("Connection failed: " + e.message);
+            }
+        }
+
+        async function payWithCelo() {
+            try {
+                const tx = await gameContract.payWithCelo({ 
+                    value: ethers.utils.parseEther("0.1") 
+                });
+                await tx.wait();
+                start();
+            } catch (e) { alert(e.message); }
+        }
+
+        async function payWithUSDT() {
+            try {
+                // USDT uses 6 decimals (100,000 = 0.1 USDT)
+                const amount = ethers.utils.parseUnits("0.1", 6); 
+
+                document.getElementById('status').innerText = "Step 1: Approving USDT...";
+                const appTx = await usdtContract.approve(contractAddress, amount);
+                await appTx.wait();
+
+                document.getElementById('status').innerText = "Step 2: Paying 0.1 USDT...";
+                const payTx = await gameContract.payWithUSDT();
+                await payTx.wait();
+
+                start();
+            } catch (e) { 
+                console.error(e);
+                alert("Error: " + e.message); 
+                document.getElementById('status').innerText = "Payment failed";
+            }
+        }
+
+        function start() {
+            document.getElementById('paySection').style.display = 'none';
+            document.getElementById('status').style.display = 'none';
+            document.getElementById('game-area').style.display = 'block';
+        }
+
+        let score = 0;
+        function addPoint() {
+            score++;
+            document.getElementById('score').innerText = score;
+        }
+    </script>
+</body>
+</html>
